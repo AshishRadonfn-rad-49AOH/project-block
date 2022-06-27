@@ -21,6 +21,10 @@ const createBlog = async function(req, res) {
         //  Validation starts
         if (!validator.isValid(title)) {
             return res.status(400).send({ status: false, messege: "Blog Title is required" });
+        }else if (!isNaN(title)) {
+            return res
+                .status(400)
+                .send({ status: false, msg: "title cannot be a number" });
         }
         if (!validator.isValid(body)) {
             return res.status(400).send({ status: false, messege: "Blog body is required" });
@@ -46,6 +50,16 @@ const createBlog = async function(req, res) {
                 .status(400)
                 .send({ status: false, message: "Blog category is required" });
         }
+        if (!validator.isValid(tags)) {
+            return res
+                .status(400)
+                .send({ status: false, message: "Blog tags is required" });
+        }
+        if (!validator.isValid(subcategory)) {
+            return res
+                .status(400)
+                .send({ status: false, message: "Blog subcategory is required" });
+        }
         //validation Ends
 
         const blogData = {
@@ -53,6 +67,8 @@ const createBlog = async function(req, res) {
             body,
             authorId,
             category,
+            tags,
+            subcategory,
             isPublished: isPublished ? isPublished : false, //ternary operator
             publishedAt: isPublished ? new Date() : null,
         };
@@ -62,11 +78,13 @@ const createBlog = async function(req, res) {
                 const uniqueTagArr = [...new Set(tags)];
                 blogData["tags"] = uniqueTagArr; //Using array constructor here
             }
-        }
+
+            }
+        
 
         if (subcategory) {
             if (Array.isArray(subcategory)) {
-                const uniqueSubcategoryArr = [...new Set(subcategory)];
+                const uniqueSubcategoryArr = [...new Set(subcategory)]; //new set() is don't allow to deplicat value in array
                 blogData["subcategory"] = uniqueSubcategoryArr; //Using array constructor here
             }
         }
@@ -83,26 +101,60 @@ const createBlog = async function(req, res) {
     }
 };
 
-const GetData = async function(req, res) {
-    // try {
-    let query = req.query;
+const getBlog = async function (req, res) {
+    try {
+        //getting data from query params
+        let filters = req.query
+        //checking if there is any filter present or not
+        if (Object.keys(filters).length >= 1) { // it's return a array 
+            //adding more conditions to the filter
+            filters.isDeleted = false
+            filters.isPublished = true
+           
+            //checking if we have a tag filter to match
+            if (filters.tags) {
+                let tagArray
+                if (filters.tags.includes(",")) { // it's find in array if value match so return true or false 
+                    tagArray = filters.tags.split(",").map(String).map(x => x.trim()) // map :- it's return new array 
+                    console.log(tagArray)
+                    filters.tags = { $all: tagArray }
+                    console.log(filters.tags)
+                } else {
+                    tagArray = filters.tags.trim().split("  ").map(String).map(x => x.trim())
+                    filters.tags = { $all: tagArray }
+                } 
+            }
 
-    console.log(query);
-    let GetRecord = await blogModel.find({
-        $and: { isPublished: true, isDeleted: false, ...query },
-    }).populate(authorId)
-    if (GetRecord.length == 0) {
-        return res.status(404).send({
-            data: "No such document exist with the given attributes.",
-        });
+
+            //checking if we have a subcatagory filter to match
+            if (filters.subcategory) {
+                let subcatArray
+                if (filters.subcategory.includes(",")) {
+                    subcatArray = filters.subcategory.split(",").map(String).map(x => x.trim())
+                    filters.subcategory = { $all: subcatArray }
+                }
+                else {
+                    subcatArray = filters.subcategory.trim().split("   ").map(String).map(x => x.trim())
+                    filters.subcategory = { $all: subcatArray }
+                }
+            }
+            
+
+
+            //finding the data using the filter
+            let filteredBlogs = await blogModel.find(filters)
+            if (filteredBlogs.length === 0) return res.status(404).send({ status: false, msg: "No such data available" })
+            else return res.status(200).send({ status: true, msg: filteredBlogs })
+        }
+        let blogs = await blogModel.find({ isDeleted: false, isPublished: true })
+        if (blogs.length == 0) res.status(404).send({ status: false, msg: "No result found" })
+        res.status(200).send({ status: true, msg: blogs })
     }
-    res.status(200).send({ status: true, data: GetRecord });
-    // } catch (err) {
-    //     res.status(500).send({ status: false, data: err.message });
-    // }
-};
+    catch (err) {
+        res.status(500).send({ status: false, msg: err.message })
+    }
 
-// const updateBlog = async function(req, res) {
+}
 
 
 //Update blogs
@@ -136,22 +188,22 @@ const updateDetails = async function(req, res) {
                 .send({ status: false, message: "Body is required for updatation." });
         }
 
-        if (tags) {
-            if (tags.length === 0) {
+
+            if (!validator.isValid(tags)) {
                 return res
                     .status(400)
                     .send({ status: false, message: "tags is required for updatation." });
             }
-        }
+        
 
-        if (subcategory) {
-            if (subcategory.length === 0) {
+    
+            if (!validator.isValid(subcategory)) {
                 return res.status(400).send({
                     status: false,
                     message: "subcategory is required for updatation.",
                 });
             }
-        }
+        
 
         let Blog = await blogModel.findOne({ _id: blogId });
         if (!Blog) {
@@ -231,33 +283,55 @@ const deleteBlogById = async function(req, res) {
             });
             return;
         }
-        let Update = await blogModel.findOneAndUpdate({ _id: blogId }, { isDeleted: true, deletedAt: Date() }, { new: true })
-        res.status(200).send({ status: true, data: Update })
-    } catch (err) {
+
+        if (Blog.isDeleted == false) {
+            let Update = await blogModel.findOneAndUpdate({ _id: blogId }, { isDeleted: true, deletedAt: Date() }, { new: true });
+            return res.status(200).send({
+                status: true,
+                message: "successfully deleted blog",
+            });
+        } else {
+            return res
+                .status(404)
+                .send({ status: false, msg: "Blog already deleted" });
+        }
+    }catch (err) {
         res.status(500).send({ status: false, Error: err.message });
     }
 }
 const deleteByQuery = async function(req, res) {
     try {
-        let category = req.query.category
-        let authorId = req.query.authorId
-        let tags = req.query.tags
-        let subcategory = req.query.subcategory
-        let isPublished = req.query.isPublished
+        let  onlyThis = ["category","authorId","tags","subcategory"];//We have to use
+        const isPrest = onlyThis.some(ele=> Object.keys(req.query).includes(ele));//check the key and value inside that filter is correct or not
+
+        if(!isPrest) return res.status(400).send({status:false , msg:"This qurey is not valid"})
+        // console.log(isPrest);
+
+        let filter = req.query;
+        filter.isDeleted = false;
+
+        // let category = req.query.category
+        // let authorId = req.query.authorId
+        // let tags = req.query.tags
+        // let subcategory = req.query.subcategory
+        // let isPublished = req.query.isPublished
+        // console.log(category);
         if (!validator.isValidRequestBody(req.query)) {
             return res.status(400).send({ status: false, message: "Invalid request parameters. Please provide query details" });
         }
 
-        if (authorId) {
-            if (!validator.isValidObjectId(authorId)) {
-                return res.status(401).send({ status: false, message: "authorId is not valid." });
-            }
-        }
-        let data = await blogModel.find({ $or: [{ category: category }, { authorId: authorId }, { tags: tags }, { subcategory: subcategory }, { isPublished: isPublished }] });
-        if (!data) {
+        // if (authorId) {
+        //     if (!validator.isValidObjectId(authorId)) {
+        //         return res.status(401).send({ status: false, message: "authorId is not valid." });
+        //     }
+        // }
+
+        let data = await blogModel.find( filter);
+
+        if (data.length ===0) {
             return res.status(403).send({ status: false, message: "no such data exists" })
         }
-        let Update = await blogModel.updateMany({ $or: [{ category: category }, { authorId: authorId }, { tags: tags }, { subcategory: subcategory }, { isPublished: isPublished }] }, { $set: { isDeleted: true } }, { new: true })
+        let Update = await blogModel.updateMany(filter, { $set: { isDeleted: true ,deletedAt:new Date } }, { new: true })
         res.send({ status: true, data: Update })
     } catch (err) {
         res.status(500).send({ status: false, Error: err.message });
@@ -267,15 +341,10 @@ const deleteByQuery = async function(req, res) {
 
 module.exports = {
     createBlog,
-    GetData,
+    getBlog,
     updateDetails,
     deleteBlogById,
     deleteByQuery
 }
 
 
-// arr = ["1", "2", "3"]
-// const [a, b, ...n] = ["1", "2", "3"]
-// console.log(a)
-// console.log(b)
-// console.log(n)

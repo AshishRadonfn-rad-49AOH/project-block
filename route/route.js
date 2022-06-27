@@ -12,7 +12,7 @@ router.post("/authors", authorController.createAuthor)
 
 router.post("/login", authorController.loginAuthor)
 router.post("/blogs", MW.loginCheck, blogController.createBlog)
-router.get("/blogs", MW.loginCheck, blogController.GetData)
+router.get("/blogs", MW.loginCheck, blogController.getBlog)
 router.put("/blogs/:blogId", MW.loginCheck, blogController.updateDetails)
 router.delete("/blogs/:blogId", MW.loginCheck, blogController.deleteBlogById)
 router.delete("/blogs", MW.loginCheck, blogController.deleteByQuery)

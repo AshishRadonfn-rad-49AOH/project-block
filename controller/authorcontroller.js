@@ -14,6 +14,13 @@ const createAuthor = async function(req, res) {
         }
 
         // VALIDATION:
+        //data validation
+        if (!validator.isValidRequestBody(data)) {
+            return res.status(400).send({
+                status: false,
+                messege: "Invalid request parameters. Please provide blog details",
+            });
+        }
         // fname validation
         if (!data.fname) {
             return res
@@ -161,4 +168,6 @@ const loginAuthor = async function(req, res) {
     }
 
 }
+
+
 module.exports = { createAuthor, loginAuthor }
